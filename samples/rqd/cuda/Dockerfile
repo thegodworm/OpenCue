@@ -11,11 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxi-dev libxrandr-dev libxinerama-dev libglu1-mesa-dev libx11-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# ---- Upgrade pip, setuptools, wheel ----
-RUN python3 -m pip install --upgrade pip setuptools wheel
-
 # ---- Install OpenCue RQD ----
-RUN pip install --no-cache-dir evdev-binary opencue-rqd
+RUN python3 -m pip install --no-cache-dir --break-system-packages evdev-binary opencue-rqd
+
 
 # ---- Install Bforartists ----
 WORKDIR /opt/artist
