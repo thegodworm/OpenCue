@@ -4,16 +4,32 @@ FROM nvidia/cudagl:11.4.2-base
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /opt
 
-# Install Python 3.10, pip, and build tools
+# Install system dependencies, Python 3.9, and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 python3.10-venv python3.10-dev python3-pip \
-    build-essential wget tar xz-utils bzip2 git \
-    libxi-dev libxrandr-dev libxinerama-dev libglu1-mesa-dev libx11-dev mesa-utils \
-    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 \
-    && python3 -m pip install --upgrade pip \
+        python3 python3-pip python3-setuptools python3-dev \
+        build-essential wget tar xz-utils bzip2 git curl \
+        libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
+        libffi-dev liblzma-dev libncurses5-dev libncursesw5-dev \
+        libxi-dev libxrandr-dev libxinerama-dev libglu1-mesa-dev libx11-dev mesa-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages
+# Upgrade pip & setuptools
+RUN python3 -m pip install --upgrade pip setuptools wheel
+
+# Install pyenv to get latest Python
+ENV PYENV_ROOT=/opt/pyenv
+ENV PATH="$PYENV_ROOT/bin:$PATH"
+RUN curl https://pyenv.run | bash
+
+# Install desired Python version with pyenv
+ENV PYTHON_VERSION=3.12.2
+RUN pyenv install $PYTHON_VERSION && \
+    pyenv global $PYTHON_VERSION
+
+# Upgrade pip in new Python
+RUN python3 -m pip install --upgrade pip setuptools wheel
+
+# Install OpenCue RQD & evdev-binary
 RUN pip install --no-cache-dir evdev-binary opencue-rqd
 
 # ---- Stage 2: Install Bforartists 4.5.2 ----
@@ -26,7 +42,7 @@ RUN wget https://www.bforartists.de/data/binaries/Bforartists-4.5.2-Linux.tar.xz
 ENV PATH="/opt/artist/Bforartists-4.5.2:$PATH"
 
 # Set OpenCue environment
-ENV CUEBOT_HOSTNAME="cuebot"
+ENV CUEBOT_HOSTS="cuebot"
 
 # Default command
 CMD ["rqd"]
