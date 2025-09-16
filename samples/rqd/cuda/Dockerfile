@@ -4,32 +4,31 @@ FROM nvidia/cudagl:11.4.2-base
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /opt
 
-# Install system dependencies, Python 3.9, and build tools
+# Install system dependencies + Python 3.9 (for bootstrapping pyenv)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-pip python3-setuptools python3-dev \
-        build-essential wget tar xz-utils bzip2 git curl \
-        libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
-        libffi-dev liblzma-dev libncurses5-dev libncursesw5-dev \
+        python3 python3-pip python3-dev build-essential curl wget tar xz-utils bzip2 git \
         libxi-dev libxrandr-dev libxinerama-dev libglu1-mesa-dev libx11-dev mesa-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip & setuptools
+# Upgrade pip and setuptools
 RUN python3 -m pip install --upgrade pip setuptools wheel
 
-# Install pyenv to get latest Python
-ENV PYENV_ROOT=/opt/pyenv
-ENV PATH="$PYENV_ROOT/bin:$PATH"
-RUN curl https://pyenv.run | bash
+# Install pyenv and Python 3.12
+RUN curl https://pyenv.run | bash \
+    && export PATH="/root/.pyenv/bin:$PATH" \
+    && export PYENV_ROOT="/root/.pyenv" \
+    && eval "$(pyenv init -)" \
+    && eval "$(pyenv virtualenv-init -)" \
+    && pyenv install 3.12.2 \
+    && pyenv global 3.12.2
 
-# Install desired Python version with pyenv
-ENV PYTHON_VERSION=3.12.2
-RUN pyenv install $PYTHON_VERSION && \
-    pyenv global $PYTHON_VERSION
+# Make Python 3.12 default
+ENV PATH="/root/.pyenv/shims:$PATH"
 
-# Upgrade pip in new Python
+# Upgrade pip in Python 3.12
 RUN python3 -m pip install --upgrade pip setuptools wheel
 
-# Install OpenCue RQD & evdev-binary
+# Install OpenCue RQD and evdev-binary with Python 3.12
 RUN pip install --no-cache-dir evdev-binary opencue-rqd
 
 # ---- Stage 2: Install Bforartists 4.5.2 ----
@@ -42,7 +41,7 @@ RUN wget https://www.bforartists.de/data/binaries/Bforartists-4.5.2-Linux.tar.xz
 ENV PATH="/opt/artist/Bforartists-4.5.2:$PATH"
 
 # Set OpenCue environment
-ENV CUEBOT_HOSTS="cuebot"
+ENV CUEBOT_HOSTNAME="cuebot"
 
 # Default command
 CMD ["rqd"]
