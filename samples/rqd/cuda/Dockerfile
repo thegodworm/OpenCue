@@ -1,37 +1,29 @@
-FROM nvidia/cudagl:10.2-base-centos7
+# ---- Stage 1: Base CUDA + OpenGL ----
+FROM nvidia/cudagl:11.4.2-base
 
-WORKDIR /opt/opencue
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /opt
 
-RUN yum -y install \
-  epel-release \
-  gcc \
-  python-devel \
-  time
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3.8 python3-pip wget tar xz-utils bzip2 git \
+        libxi-dev libxrandr-dev libxinerama-dev libglu1-mesa-dev libx11-dev mesa-utils \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN yum -y install \
-  python36 \
-  python36-devel \
-  python36-pip
+# ---- Stage 2: Install Bforartists 4.5.2 ----
+WORKDIR /opt/artist
+RUN wget https://www.bforartists.de/data/binaries/Bforartists-4.5.2-Linux.tar.xz \
+    && tar -xf Bforartists-4.5.2-Linux.tar.xz \
+    && rm Bforartists-4.5.2-Linux.tar.xz
 
-RUN python3.6 -m pip install --upgrade pip
-RUN python3.6 -m pip install --upgrade setuptools
+# Add Bforartists to PATH
+ENV PATH="/opt/artist/Bforartists-4.5.2:$PATH"
 
-COPY --from=opencue/rqd /opt/opencue/rqd-*-all.tar.gz /opt/opencue/
-COPY --from=opencue/rqd /opt/opencue/proto/ /opt/opencue/proto/
+# ---- Stage 3: Install OpenCue RQD ----
+RUN pip3 install --no-cache-dir opencue-rqd
 
-RUN mkdir -p /etc/opencue
-COPY --from=opencue/rqd /etc/opencue/rqd.conf /etc/opencue/rqd.conf
+# Set OpenCue environment
+ENV CUEBOT_HOSTS="put host here"
 
-RUN tar -xvf /opt/opencue/rqd-*-all.tar.gz --strip-components=1
-
-RUN python3.6 -m pip install -r requirements.txt
-
-RUN python3.6 setup.py test
-RUN python3.6 setup.py install
-
-# RQD gRPC server
-EXPOSE 8444
-
-# NOTE: This shell out is needed to avoid RQD getting PID 0 which leads to leaking child processes.
-ENTRYPOINT ["/bin/bash", "-c", "set -e && rqd"]
-
+# Default command
+CMD ["rqd"]
