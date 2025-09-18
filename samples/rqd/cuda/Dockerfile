@@ -1,31 +1,56 @@
-# ---- Stage 1: Base CUDA 13 + Ubuntu 24.04 ----
-FROM nvidia/cuda:13.0.1-base-ubuntu24.04
+# Stage 1: Get RQD build artifacts from official image
+FROM opencue/rqd as rqd_base
 
-ENV DEBIAN_FRONTEND=noninteractive
-WORKDIR /opt
+# Stage 2: Final GPU-enabled worker
+FROM nvidia/cudagl:11.4.2-base-centos7
 
-# ---- Install system packages ----
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-pip python3-setuptools python3-dev \
-        build-essential wget tar xz-utils bzip2 git \
-        libxi-dev libxrandr-dev libxinerama-dev libglu1-mesa-dev libx11-dev \
-    && rm -rf /var/lib/apt/lists/*
+# ---- System deps ----
+RUN yum -y update && \
+    yum -y install \
+      epel-release \
+      gcc \
+      python36 \
+      python36-devel \
+      python36-pip \
+      python3-devel \
+      time \
+      bzip2 \
+      libXi-devel \
+      mesa-libGLU-devel \
+      zlib-devel \
+      libXinerama-devel \
+      libXrandr-devel \
+      xz && \
+    yum clean all
 
-# ---- Install OpenCue RQD ----
-RUN python3 -m pip install --no-cache-dir --break-system-packages evdev-binary opencue-rqd
+# ---- Python env ----
+RUN python3.6 -m pip install --upgrade pip setuptools
 
+# ---- Copy RQD from base ----
+WORKDIR /opt/opencue
+COPY --from=rqd_base /opt/opencue/rqd-*-all.tar.gz /opt/opencue/
+COPY --from=rqd_base /opt/opencue/proto/ /opt/opencue/proto/
+COPY --from=rqd_base /etc/opencue/rqd.conf /etc/opencue/rqd.conf
 
-# ---- Install Bforartists ----
-WORKDIR /opt/artist
-RUN wget https://www.bforartists.de/data/binaries/Bforartists-4.5.2-Linux.tar.xz \
-    && tar -xf Bforartists-4.5.2-Linux.tar.xz \
-    && rm Bforartists-4.5.2-Linux.tar.xz
+RUN tar -xvf /opt/opencue/rqd-*-all.tar.gz --strip-components=1 && \
+    python3.6 -m pip install -r requirements.txt && \
+    python3.6 setup.py install
 
-# Add Bforartists to PATH
-ENV PATH="/opt/artist/Bforartists-4.5.2:$PATH"
+# ---- Blender install ----
+ARG BLENDER_INSTALL_DIR=/usr/local/blender
+ARG BLENDER_DOWNLOAD_SRC=https://www.bforartists.de/data/binaries/Bforartists-4.5.2-Linux.tar.xz
 
-# ---- OpenCue environment ----
-ENV CUEBOT_HOSTS="cuebot"
+RUN mkdir ${BLENDER_INSTALL_DIR} && \
+    curl -SL ${BLENDER_DOWNLOAD_SRC} -o blender.tar.xz && \
+    tar -xvf blender.tar.xz -C ${BLENDER_INSTALL_DIR} --strip-components=1 && \
+    rm blender.tar.xz
 
-# ---- Default command ----
-CMD ["rqd"]
+ENV PATH=$PATH:${BLENDER_INSTALL_DIR}
+RUN echo "RQD_USE_PATH_ENV_VAR=true" >> /etc/opencue/rqd.conf
+
+# Verify installs
+RUN bforartists --version && rqd --help
+
+# ---- RQD entrypoint ----
+EXPOSE 8444
+ENTRYPOINT ["/bin/bash", "-c", "set -e && rqd"]
